@@ -3245,6 +3245,34 @@ static int drv_cmd_get_country(struct hdd_adapter *adapter,
 	return ret;
 }
 
+/**
+ * set APF working status per WLAN chip's suspend monitor mode
+
+ * @adapter: pointer to adapter on which request is received
+ * Return: On success 0, negative value on error.
+ */
+
+static int drv_apf_enable(struct hdd_adapter *adapter, bool apf_enable)
+{
+	QDF_STATUS status;
+
+	hdd_enter();
+	hdd_prevent_suspend(WIFI_POWER_EVENT_WAKELOCK_WOW);
+
+	status = sme_set_apf_enable_disable(hdd_adapter_get_mac_handle(adapter),
+					    adapter->session_id, apf_enable);
+	if (!QDF_IS_STATUS_SUCCESS(status)) {
+		hdd_err("Unable to post sme apf enable/disable message (status-%d)",
+				status);
+		return -EINVAL;
+	}
+	adapter->apf_context.apf_enabled = apf_enable;
+
+	hdd_allow_suspend(WIFI_POWER_EVENT_WAKELOCK_WOW);
+	hdd_exit();
+	return 0;
+}
+
 static int drv_cmd_set_roam_trigger(struct hdd_adapter *adapter,
 				    struct hdd_context *hdd_ctx,
 				    uint8_t *command,
@@ -3629,7 +3657,14 @@ static int drv_cmd_set_suspend_mode(struct hdd_adapter *adapter,
 		return -EINVAL;
 	}
 
-	hdd_debug("idle_monitor:%d", idle_monitor);
+	//MIUI: ADD
+	/*idle_monitor:
+         0: screen on/monitor off/APF disable/high perf mode enable,
+         1: screen off/monitor on/APF enable/high perf mode disable
+        */
+	drv_apf_enable(adapter, idle_monitor);
+
+	hdd_debug("APF status and idle_monitor:%d, ", idle_monitor);
 	status = ucfg_pmo_tgt_psoc_send_idle_roam_suspend_mode(hdd_ctx->psoc,
 							       idle_monitor);
 	if (QDF_IS_STATUS_ERROR(status)) {
